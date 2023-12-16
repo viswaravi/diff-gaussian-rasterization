@@ -155,6 +155,7 @@ void CudaRasterizer::Rasterizer::markVisible(
 CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char*& chunk, size_t P)
 {
 	GeometryState geom;
+	// Assigns pointers to the correct locations in the chunk
 	obtain(chunk, geom.depths, P, 128);
 	obtain(chunk, geom.clamped, P * 3, 128);
 	obtain(chunk, geom.internal_radii, P, 128);
@@ -196,9 +197,9 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chun
 // Forward rendering procedure for differentiable rasterization
 // of Gaussians.
 int CudaRasterizer::Rasterizer::forward(
-	std::function<char* (size_t)> geometryBuffer,
-	std::function<char* (size_t)> binningBuffer,
-	std::function<char* (size_t)> imageBuffer,
+	std::function<char* (size_t)> geometryBuffer, // Callback Function to allocate memory for geometry-based auxiliary buffers
+	std::function<char* (size_t)> binningBuffer,  // Callback Function to allocate memory for binning-based auxiliary buffers
+	std::function<char* (size_t)> imageBuffer,    // Callback Function to allocate memory for image-based auxiliary buffers
 	const int P, int D, int M,
 	const float* background,
 	const int width, int height,
@@ -217,14 +218,18 @@ int CudaRasterizer::Rasterizer::forward(
 	const bool prefiltered,
 	float* out_color,
 	int* radii,
+	float* raster_depth_map,
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
 
+	// Calculate size of memory needed for this buffer
 	size_t chunk_size = required<GeometryState>(P);
+	// Dynamically resize the buffer for rasterization
 	char* chunkptr = geometryBuffer(chunk_size);
-	GeometryState geomState = GeometryState::fromChunk(chunkptr, P);
+	// Assigns pointers to the correct locations in the chunk
+	GeometryState geomState = GeometryState::fromChunk(chunkptr, P); 
 
 	if (radii == nullptr)
 	{
@@ -270,7 +275,7 @@ int CudaRasterizer::Rasterizer::forward(
 		tile_grid,
 		geomState.tiles_touched,
 		prefiltered
-	), debug)
+	), debug)  
 
 	// Compute prefix sum over full list of touched tile counts by Gaussians
 	// E.g., [2, 3, 0, 2, 1] -> [2, 5, 5, 7, 8]
@@ -327,10 +332,13 @@ int CudaRasterizer::Rasterizer::forward(
 		geomState.means2D,
 		feature_ptr,
 		geomState.conic_opacity,
+		geomState.depths,
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		background,
-		out_color), debug)
+		out_color,
+		raster_depth_map
+		), debug)
 
 	return num_rendered;
 }
