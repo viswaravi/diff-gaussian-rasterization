@@ -219,6 +219,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_color,
 	int* radii,
 	float* raster_depth_map,
+	float* visibility_map,
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
@@ -337,7 +338,8 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.n_contrib,
 		background,
 		out_color,
-		raster_depth_map
+		raster_depth_map,
+		visibility_map
 		), debug)
 
 	return num_rendered;

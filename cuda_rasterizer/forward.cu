@@ -272,7 +272,8 @@ renderCUDA(
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
-	float* __restrict__ raster_depth_map
+	float* __restrict__ raster_depth_map,
+	float* __restrict__ visibility_map
 	)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -305,7 +306,14 @@ renderCUDA(
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
-	float min_depth = 1000000.0f;
+	
+	// Opacity and Transmittance based Silhouette Visibility
+	float visibility = 0.0f;
+
+	float min_depth = 999.0f;
+	float min_depth_alpha = 0.0f;
+	float surface_depth = 0.0f;
+	float max_depth = 0.0f;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -350,6 +358,7 @@ renderCUDA(
 			float alpha = min(0.99f, con_o.w * exp(power));
 			if (alpha < 1.0f / 255.0f)
 				continue;
+
 			float test_T = T * (1 - alpha);
 			if (test_T < 0.0001f)
 			{
@@ -360,15 +369,21 @@ renderCUDA(
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
+			
+			visibility += alpha * T;
 
 			T = test_T;
+
+			// Keep track of depths for depth map
+			if (depth < min_depth)
+				min_depth = depth;
+				min_depth_alpha = alpha;
+			// min_depth = min(min_depth, depth);
+			// max_depth = max(max_depth, depth);
 
 			// Keep track of last range entry to update this
 			// pixel.
 			last_contributor = contributor;
-
-			// Keep track of minimum depth for depth map
-			min_depth = min(min_depth, depth);
 		}
 	}
 
@@ -379,6 +394,7 @@ renderCUDA(
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
 		raster_depth_map[pix_id] = min_depth;
+		visibility_map[pix_id] = visibility;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 	}
@@ -397,7 +413,8 @@ void FORWARD::render(
 	uint32_t* n_contrib,
 	const float* bg_color,
 	float* out_color,
-	float* raster_depth_map)
+	float* raster_depth_map,
+	float* visibility_map)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -411,7 +428,8 @@ void FORWARD::render(
 		n_contrib,
 		bg_color,
 		out_color,
-		raster_depth_map);
+		raster_depth_map,
+		visibility_map);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

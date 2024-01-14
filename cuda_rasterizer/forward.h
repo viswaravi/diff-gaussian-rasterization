@@ -61,7 +61,8 @@ namespace FORWARD
 		uint32_t* n_contrib,
 		const float* bg_color,
 		float* out_color,
-		float* raster_depth_map);
+		float* raster_depth_map,
+		float* visibility_map);
 }
 
 

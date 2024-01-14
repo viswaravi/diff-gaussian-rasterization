@@ -51,6 +51,7 @@ namespace CudaRasterizer
 			float* out_color,
 			int* radii = nullptr,
 			float* raster_depth_map = nullptr,
+			float* visibility_map = nullptr,
 			bool debug = false);
 
 		static void backward(
