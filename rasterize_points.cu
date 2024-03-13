@@ -32,7 +32,7 @@ std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
     return lambda;
 }
 
-std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 RasterizeGaussiansCUDA(
 	const torch::Tensor& background,
 	const torch::Tensor& means3D,
@@ -42,6 +42,7 @@ RasterizeGaussiansCUDA(
 	const torch::Tensor& rotations,
 	const float scale_modifier,
 	const torch::Tensor& cov3D_precomp,
+	const torch::Tensor& ages,
 	const torch::Tensor& viewmatrix,
 	const torch::Tensor& projmatrix,
 	const float tan_fovx, 
@@ -71,6 +72,8 @@ RasterizeGaussiansCUDA(
   // Create buffers for returning
   torch::Tensor raster_depth_map = torch::full({H,W}, 0.0, float_opts);
   torch::Tensor visibility_map = torch::full({H,W}, 0.0, float_opts);
+  torch::Tensor age_map = torch::full({H,W}, 0.0, float_opts);
+
 
   torch::Device device(torch::kCUDA);
   torch::TensorOptions options(torch::kByte);
@@ -107,6 +110,7 @@ RasterizeGaussiansCUDA(
 		scale_modifier,
 		rotations.contiguous().data_ptr<float>(),
 		cov3D_precomp.contiguous().data<float>(), 
+		ages.contiguous().data<int>(),
 		viewmatrix.contiguous().data<float>(), 
 		projmatrix.contiguous().data<float>(),
 		campos.contiguous().data<float>(),
@@ -117,9 +121,10 @@ RasterizeGaussiansCUDA(
 		radii.contiguous().data<int>(),
 		raster_depth_map.contiguous().data<float>(),
 		visibility_map.contiguous().data<float>(),
+		age_map.contiguous().data<float>(),
 		debug);
   }
-  return std::make_tuple(rendered, out_color, radii, raster_depth_map, visibility_map, geomBuffer, binningBuffer, imgBuffer);
+  return std::make_tuple(rendered, out_color, radii, raster_depth_map, visibility_map, age_map, geomBuffer, binningBuffer, imgBuffer);
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

@@ -43,6 +43,7 @@ namespace CudaRasterizer
 			const float scale_modifier,
 			const float* rotations,
 			const float* cov3D_precomp,
+			const int* ages,
 			const float* viewmatrix,
 			const float* projmatrix,
 			const float* cam_pos,
@@ -52,6 +53,7 @@ namespace CudaRasterizer
 			int* radii = nullptr,
 			float* raster_depth_map = nullptr,
 			float* visibility_map = nullptr,
+			float* age_map = nullptr,
 			bool debug = false);
 
 		static void backward(

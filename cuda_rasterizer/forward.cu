@@ -268,12 +268,14 @@ renderCUDA(
 	const float* __restrict__ features,
 	const float4* __restrict__ conic_opacity,
 	const float* __restrict__ depths,
+	const int* __restrict__ ages,
 	float* __restrict__ final_T,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
 	float* __restrict__ raster_depth_map,
-	float* __restrict__ visibility_map
+	float* __restrict__ visibility_map,
+	float* __restrict__ age_map
 	)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -300,6 +302,7 @@ renderCUDA(
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_depth[BLOCK_SIZE];
+	__shared__ float collected_age[BLOCK_SIZE];
 
 	// Initialize helper variables
 	float T = 1.0f;
@@ -310,9 +313,13 @@ renderCUDA(
 	// Opacity and Transmittance based Silhouette Visibility
 	float visibility = 0.0f;
 
-	float min_depth = 999.0f;
-	float min_depth_alpha = 0.0f;
+	// Depth based on Alpha and Transmittance
 	float surface_depth = 0.0f;
+	
+	float avg_age = 0.0f;
+	int contrib_count = 0;
+
+	float min_depth = 999.0f;
 	float max_depth = 0.0f;
 
 	// Iterate over batches until all done or range is complete
@@ -332,6 +339,7 @@ renderCUDA(
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			collected_depth[block.thread_rank()] = depths[coll_id];
+			collected_age[block.thread_rank()] = ages[coll_id];
 		}
 		block.sync();
 
@@ -347,6 +355,7 @@ renderCUDA(
 			float2 d = { xy.x - pixf.x, xy.y - pixf.y };
 			float4 con_o = collected_conic_opacity[j];
 			float depth  = collected_depth[j];
+			float age = collected_age[j];
 			float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
 			if (power > 0.0f)
 				continue;
@@ -370,14 +379,21 @@ renderCUDA(
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 			
+
 			visibility += alpha * T;
+			
+			surface_depth += depth * alpha * T;
 
 			T = test_T;
 
+			avg_age += age;
+			contrib_count++;
+			
 			// Keep track of depths for depth map
-			if (depth < min_depth)
-				min_depth = depth;
-				min_depth_alpha = alpha;
+			// if (depth < min_depth)
+			// 	min_depth = depth;
+
+			// min_depth_alpha = alpha;
 			// min_depth = min(min_depth, depth);
 			// max_depth = max(max_depth, depth);
 
@@ -393,8 +409,15 @@ renderCUDA(
 	{
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
-		raster_depth_map[pix_id] = min_depth;
+		
+		raster_depth_map[pix_id] = surface_depth;
 		visibility_map[pix_id] = visibility;
+
+		if (contrib_count > 0)
+			age_map[pix_id] = avg_age / contrib_count;
+		else
+			age_map[pix_id] = -1.0f;
+	
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 	}
@@ -409,12 +432,14 @@ void FORWARD::render(
 	const float* colors,
 	const float4* conic_opacity,
 	const float* depths,
+	const int* ages,
 	float* final_T,
 	uint32_t* n_contrib,
 	const float* bg_color,
 	float* out_color,
 	float* raster_depth_map,
-	float* visibility_map)
+	float* visibility_map,
+	float* age_map)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -424,12 +449,14 @@ void FORWARD::render(
 		colors,
 		conic_opacity,
 		depths,
+		ages,
 		final_T,
 		n_contrib,
 		bg_color,
 		out_color,
 		raster_depth_map,
-		visibility_map);
+		visibility_map,
+		age_map);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

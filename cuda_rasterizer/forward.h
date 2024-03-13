@@ -57,12 +57,14 @@ namespace FORWARD
 		const float* features,
 		const float4* conic_opacity,
 		const float* depths,
+		const int* ages,
 		float* final_T,
 		uint32_t* n_contrib,
 		const float* bg_color,
 		float* out_color,
 		float* raster_depth_map,
-		float* visibility_map);
+		float* visibility_map,
+		float* age_map);
 }
 
 

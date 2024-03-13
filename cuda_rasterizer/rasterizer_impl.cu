@@ -211,6 +211,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float scale_modifier,
 	const float* rotations,
 	const float* cov3D_precomp,
+	const int* ages,
 	const float* viewmatrix,
 	const float* projmatrix,
 	const float* cam_pos,
@@ -220,6 +221,7 @@ int CudaRasterizer::Rasterizer::forward(
 	int* radii,
 	float* raster_depth_map,
 	float* visibility_map,
+	float* age_map,
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
@@ -334,12 +336,14 @@ int CudaRasterizer::Rasterizer::forward(
 		feature_ptr,
 		geomState.conic_opacity,
 		geomState.depths,
+		ages,
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		background,
 		out_color,
 		raster_depth_map,
-		visibility_map
+		visibility_map,
+		age_map
 		), debug)
 
 	return num_rendered;
